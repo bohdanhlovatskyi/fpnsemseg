@@ -9,7 +9,14 @@ class D(nn.Module):
         super().__init__()
         
     def forward(self, p, z):
-        return -F.cosine_similarity(p, z.detach(), dim=-1).mean()
+        # return -F.cosine_similarity(p, z.detach(), dim=-1).mean()
+
+        z = z.detach()
+
+        p = F.normalize(p, p=2, dim=1)
+        z = F.normalize(z, p=2, dim=1)
+        
+        return -(p * z).sum(dim=1).mean()
     
 class Projector(nn.Module):
     

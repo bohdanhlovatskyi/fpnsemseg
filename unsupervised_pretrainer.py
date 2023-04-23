@@ -1,6 +1,7 @@
 import torch
 import albumentations as A
 import pytorch_lightning as pl
+import torchvision.transforms as transforms
 
 from albumentations.pytorch import ToTensorV2
 
@@ -13,23 +14,42 @@ class Module(pl.LightningModule):
         self.cfg = config
         self.pretrainer = Model()
         
-        self.tr = A.Compose([
-            A.HorizontalFlip(p=0.5), 
-            A.VerticalFlip(p=0.5), 
-            A.ShiftScaleRotate(),
-            A.RandomBrightnessContrast(p=0.2),
-            A.Blur(), 
-            A.GaussNoise(), 
-            A.ElasticTransform(), 
-            A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)), 
-            ToTensorV2()
+        # self.tr = A.Compose([
+        #     A.HorizontalFlip(p=0.5), 
+        #     A.VerticalFlip(p=0.5), 
+        #     A.ShiftScaleRotate(),
+        #     A.RandomBrightnessContrast(p=0.2),
+        #     A.Blur(), 
+        #     A.GaussNoise(), 
+        #     A.ElasticTransform(), 
+        #     A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)), 
+        #     ToTensorV2()
+        # ])
+
+        self.tr = transforms.Compose([
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomVerticalFlip(),
+            transforms.RandomApply([transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8),
+            transforms.RandomGrayscale(0.2),
+            transforms.GaussianBlur(kernel_size=5, sigma=(0.1, 2.0)),
+            # transforms.ToTensor(),
+            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
         ])
+
+        self.tt = transforms.ToTensor()
     
     def training_step(self, batch, batch_idx):
         img1, img2 = batch
-        loss = self.pretrainer(img1, img2)
-        self.log("loss", on_step=True, on_epoch=True, progress_bar=True, logger=True)
+
+        with torch.no_grad():
+            img1, img2 = self.tr(img1), self.tr(img2)
+
+        loss = self.pretrainer(img1, img2)    
+        if torch.isnan(loss):
+            return None
         
+        self.log("loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+    
         return loss
     
     def configure_optimizers(self):
@@ -42,7 +62,7 @@ class Module(pl.LightningModule):
         
         sch = torch.optim.lr_scheduler.CosineAnnealingLR(
             opt, 
-            T_max=NUM_EPOCHS
+            T_max=self.cfg["num_epochs"]
         )
         
         return [opt], [sch]
@@ -50,24 +70,26 @@ class Module(pl.LightningModule):
     def train_dataloader(self):
         ud = UnsupervisedDataset(
             root_dir="data/unlabeled", 
-            transform1 = self.tr, 
-            transform2 = self.tr, 
+            transform1 = self.tt, 
+            transform2 = self.tt, 
         )
         
         return torch.utils.data.DataLoader(
             ud, 
             pin_memory=True, 
             num_workers=4, 
-            batch_size=512, 
+            batch_size=self.cfg["bs"], 
             shuffle=True
         )
 
 if __name__ == "__main__":
-    BS: int = 512
-    NUM_EPOCHS: int = 100
+    BS: int = 256
+    NUM_EPOCHS: int = 20
     BASE_LR: float = 0.05
 
     config = {
+        "bs": BS, 
+        "num_epochs": NUM_EPOCHS, 
         "lr": BASE_LR * (BS / 256), 
         "momentum": 0.9, 
         "wd": 0.0001, 
@@ -76,8 +98,6 @@ if __name__ == "__main__":
     model = Module(config)
 
     trainer = pl.Trainer(
-        fast_dev_run=True, 
-        max_epochs=100,
         accelerator="gpu", 
         strategy="ddp",
         callbacks=[
@@ -87,7 +107,9 @@ if __name__ == "__main__":
         ], 
         logger = pl.loggers.TensorBoardLogger(
             save_dir="unsupervised",
-        )
+        ), 
+        precision=16, 
+        # profiler="simple"
     )
 
     trainer.fit(model)
