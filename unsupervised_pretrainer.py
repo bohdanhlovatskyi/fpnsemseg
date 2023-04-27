@@ -13,25 +13,16 @@ class Module(pl.LightningModule):
         super().__init__()
         self.cfg = config
         self.pretrainer = Model()
-        
-        # self.tr = A.Compose([
-        #     A.HorizontalFlip(p=0.5), 
-        #     A.VerticalFlip(p=0.5), 
-        #     A.ShiftScaleRotate(),
-        #     A.RandomBrightnessContrast(p=0.2),
-        #     A.Blur(), 
-        #     A.GaussNoise(), 
-        #     A.ElasticTransform(), 
-        #     A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)), 
-        #     ToTensorV2()
-        # ])
-
+  
         self.tr = transforms.Compose([
+            transforms.RandomResizedCrop(256, scale=(0.6, 0.9)), 
             transforms.RandomHorizontalFlip(),
             transforms.RandomVerticalFlip(),
+            transforms.RandomRotation((0, 180)),
             transforms.RandomApply([transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8),
             transforms.RandomGrayscale(0.2),
-            transforms.GaussianBlur(kernel_size=5, sigma=(0.1, 2.0)),
+            transforms.RandomAdjustSharpness(sharpness_factor=2), 
+            transforms.RandomAutocontrast(), 
             # transforms.ToTensor(),
             transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
         ])
@@ -84,7 +75,7 @@ class Module(pl.LightningModule):
 
 if __name__ == "__main__":
     BS: int = 256
-    NUM_EPOCHS: int = 20
+    NUM_EPOCHS: int = 50
     BASE_LR: float = 0.05
 
     config = {
@@ -101,15 +92,15 @@ if __name__ == "__main__":
         accelerator="gpu", 
         strategy="ddp",
         callbacks=[
-            pl.callbacks.ModelCheckpoint(dirpath = 'unsupervised_checkpoints', monitor = 'loss'), 
+            pl.callbacks.ModelCheckpoint(dirpath = 'u_ckpt_2', monitor = 'loss_epoch', save_top_k=2, save_last=True), 
     #         pl.callbacks.EarlyStopping(monitor="val_loss", mode="min"), 
             pl.callbacks.LearningRateMonitor(), 
         ], 
         logger = pl.loggers.TensorBoardLogger(
-            save_dir="unsupervised",
+            save_dir="lightning_logs/unsupervised_2",
         ), 
-        precision=16, 
         # profiler="simple"
+        max_epochs=NUM_EPOCHS, 
     )
 
     trainer.fit(model)

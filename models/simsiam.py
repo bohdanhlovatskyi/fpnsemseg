@@ -71,15 +71,22 @@ class Predictor(nn.Module):
         x = self.layer2(x)
         
         return x
+
+class Identity(nn.Module):
+    def __init__(self):
+        super(Identity, self).__init__()
+        
+    def forward(self, x):
+        return x
     
 class Model(nn.Module):
     
     def __init__(self):
         super().__init__()
-        encoder = torchvision.models.resnet34(weights=None)
-        
-        self.encoder = nn.Sequential(*list(encoder.children())[:-1])
-        self.projector = Projector(encoder.fc.in_features)
+        self.encoder = torchvision.models.resnet34(weights=None)
+        in_features = self.encoder.fc.in_features
+        self.encoder.fc = nn.Identity()
+        self.projector = Projector(in_features)
         self.predictor = Predictor()
         
         self.D = D()

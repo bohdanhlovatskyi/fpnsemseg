@@ -8,29 +8,33 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
 
-def get_encoder(model, pretrained=True):
-    if model == "resnet18":
-        encoder = torchvision.models.resnet18(pretrained=pretrained)
-    elif model == "resnet34":
-        encoder = torchvision.models.resnet34(pretrained=pretrained)
-    elif model == "resnet50":
-        encoder = torchvision.models.resnet50(pretrained=pretrained)
-    elif model == "resnext50":
-        encoder = torchvision.models.resnext50_32x4d(pretrained=pretrained)
-    elif model == "resnext101":
-        encoder = torchvision.models.resnext101_32x8d(pretrained=pretrained)
-        
-    if model in ["resnet18", "resnet34"]: 
-        model = "resnet18-34"
-    else: 
-        model = "resnet50-101"
-        
-    filters_dict = {
-        "resnet18-34": [512, 512, 256, 128, 64],
-        "resnet50-101": [2048, 2048, 1024, 512, 256]
-    }
 
-    return encoder, filters_dict[model]
+def get_unsupervised_pretrained_encoder(ckpt: str = "u_ckpt_2/last.ckpt"):
+    print("Getting unsupervised pretrained encoder")
+    encoder = torchvision.models.resnet34(weights=None)
+    w = torch.load(ckpt)["state_dict"]
+
+    new_w = {}
+    for k, v, in w.items():
+        if "encoder" not in k:
+            continue
+    
+        new_w[k.replace("pretrainer.encoder.", "")] = v
+
+    encoder.load_state_dict(new_w, strict=False)
+
+    return encoder
+
+def get_encoder(pretrained=str):
+    
+    if pretrained == "random":
+        encoder = torchvision.models.resnet34(weights=None)
+    elif pretrained == "imagenet":
+        encoder = torchvision.models.resnet34(pretrained=True)
+    elif pretrained == "unsupervised":
+        encoder = get_unsupervised_pretrained_encoder()
+
+    return encoder, [512, 512, 256, 128, 64],
 
 class Model(nn.Module):
 
@@ -236,8 +240,7 @@ class FPN(EncoderDecoder):
 
     def __init__(
             self,
-            encoder_name='resnet34',
-            pretrained=True,
+            pretrained=str,
             decoder_pyramid_channels=256,
             decoder_segmentation_channels=128,
             classes=1,
@@ -246,7 +249,7 @@ class FPN(EncoderDecoder):
             final_upsampling=4,
             decoder_merge_policy='add'
     ):
-        encoder, filters_dict = get_encoder(encoder_name, pretrained)
+        encoder, filters_dict = get_encoder(pretrained)
         encoder.out_shapes = filters_dict
 
         decoder = FPNDecoder(
@@ -261,4 +264,5 @@ class FPN(EncoderDecoder):
 
         super().__init__(encoder, decoder, activation)
 
-        self.name = 'fpn-{}'.format(encoder_name)
+if __name__ == "__main__":
+    enc = get_encoder("unsupervised")

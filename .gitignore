@@ -4,3 +4,8 @@ logs*
 data
 unsupervised
 unsupervised_checkpoints
+
+
+notebooks/lightning_logs
+lightning_logs
+checkpoints

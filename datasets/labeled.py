@@ -11,18 +11,21 @@ class LabeledDataset(torch.utils.data.Dataset):
     
     def __init__(
         self, 
-        train: bool = True, 
-        num_train_sample: int = 4000,
+        ds_type: str = "train", 
+        num_train_samples: int = 4000,
+        num_val_samples: int = 500, 
         transform = None,
         base_dir: str = "data/labeled"
     ) -> None:
         super().__init__()
         self.base_dir = base_dir
         data = pd.read_csv(os.path.join(base_dir, "meta_data.csv"))
-        if train:
-            data = data[:num_train_sample]
+        if ds_type == "train":
+            data = data[:num_train_samples]
+        elif ds_type == "val":
+            data = data[num_train_samples:num_train_samples+num_val_samples]
         else:
-            data = data[num_train_sample:]
+            data = data[num_train_samples+num_val_samples:]
         self.paths = dict(zip(data['image'], data['mask']))
         self.transform = transform
 
@@ -30,11 +33,13 @@ class LabeledDataset(torch.utils.data.Dataset):
         return len(self.paths.keys())
     
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
-        img_path = list(self.paths.keys())[idx]
+        img_path = sorted(list(self.paths.keys()))[idx]
         mask_path = self.paths[img_path]
       
-        img = np.array(cv2.imread(
-            os.path.join(self.base_dir, "images" ,img_path))[::-1])
+        img = cv2.imread(
+            os.path.join(self.base_dir, "images", img_path))
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img = np.array(img)
 
         mask = np.array(cv2.imread(
             os.path.join(self.base_dir, "masks", mask_path), 0), dtype=np.float64)

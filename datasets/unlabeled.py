@@ -24,7 +24,8 @@ class UnsupervisedDataset(Dataset):
         # img1 = self.transform1(image=img1)["image"]
         # img2 = self.transform2(image=img2)["image"]
 
-        img1 = self.transform1(img1)
-        img2 = self.transform2(img2)
+        if self.transform1 is not None and self.transform2 is not None:
+            img1 = self.transform1(img1)
+            img2 = self.transform2(img2)
     
         return img1, img2
